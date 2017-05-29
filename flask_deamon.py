@@ -4,6 +4,7 @@ import player_resource
 import os
 import settings
 import logging
+import traceback
 
 app = Flask(__name__)
 
@@ -26,7 +27,8 @@ def serve(funcname, *args, **kwargs):
         return _serve_reload_module(funcname, *args, **kwargs)
     except Exception as e:
         logging.exception('Serving %s', funcname)
-        return json.dumps(dict(err='Exc: %s %r!' % (e,e)), encoding='utf8')
+        trace = traceback.format_exc()
+        return json.dumps(dict(err='Exc: %s %r! \n%s' % (e,e, trace)))
 
 last_mtime = None
 def _serve_reload_module(funcname, *args, **kwargs):

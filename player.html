@@ -67,6 +67,7 @@ white-space: normal;
            <td v-on:click="playSong(idx)" class="wrap">
            <b v-if="idx == current_song">{{song}}</b>
            <span v-if="idx !== current_song">{{song}}</span>
+           <td><span v-on:click="removeFromPlaylist(idx)">X</span>
          </tr>
        </table>
     </div>
@@ -81,11 +82,12 @@ white-space: normal;
    <div class="panel panel-default">
      <div class="panel-heading">
       <button class="btn btn-default btn-sm" v-on:click="refreshDirectory">Refresh</button>
-      <button class="btn btn-default btn-sm" v-on:click="addAllSongs">Add all</button>
+      <button class="btn btn-default btn-sm" v-on:click="addAllSongs">Add all</button> 
+      <input type="text" class="form-control" id="search_song" v-model="search_song">
      </div>
      <div class="panel-body" >
       <table id="directory" class="table table-striped">
-        <tr v-for="song in directory_list">
+        <tr v-for="song in directory_filtered">
           <td v-on:click="addSong(song)" class="wrap">{{song.name}}
         </tr>
       </table>
@@ -98,8 +100,8 @@ white-space: normal;
   </div>
   
   <table id="pprints">
-    <tr v-for="pp in pprints">
-      <td>{{ pp }}
+    <tr v-for="(msg,idx) in pprints">
+      <td><pre>Msg:{{idx}} {{pp}}</pre>
     </tr>
   </table>
   
@@ -112,10 +114,7 @@ white-space: normal;
 var PLAY_STAT = 'play'
 var PAUSE_STAT = 'pause'
 var STOP_STAT = 'stop'
-
 var BASE_URL = ''
-var FETCH_MODE = undefined//'cors'
-
 
 function FormatNumberLength(num, length) {
     var r = "" + num;
@@ -131,7 +130,6 @@ var app = new Vue({
 	position: 0,
     status: PAUSE_STAT,
     volume: 10,
-    //songs_list: {current_idx:0, songs:[]},
     current_song: '',
     songs:[],
     player_info:{},
@@ -141,8 +139,24 @@ var app = new Vue({
     update_counter:0,
     pending_update: false,
     browse_directory: true,
+    search_song:'',
   },
   computed:{
+    directory_filtered: function(){
+      if (this.search_song === ''){
+        filtered = this.directory_list
+      }
+      else{
+        filtered = []
+        for(var idx in this.directory_list){
+          var s = this.directory_list[idx]
+          if(s.name.toLowerCase().indexOf(this.search_song) >= 0){
+            filtered.push(s)
+          }
+        }
+      }
+      return filtered
+    },
     current_song_name: function(){
       if(this.current_song <= this.songs.length){
         return this.songs[this.current_song]  
@@ -203,16 +217,39 @@ var app = new Vue({
     },
     addAllSongs: function () {
       songs = []
-      for(var idx in this.directory_list){
-    	songs.push(this.directory_list[idx].id)
+      filtered = this.directory_filtered
+      for(var idx in filtered){
+        songs.push(filtered[idx].id)
       }
-      addSongs(songs, this)
+      this.addSongs(songs)
     },
     addSong: function (song) {
-      addSongs([song.id], this)
+      this.addSongs([song.id])
+    },
+    addSongs: function (songs){
+      that = this
+      var was_empty = that.songs.length == 0
+      var callback = function(playlist){
+        if(was_empty){
+          //if list was empty then play it
+          that.doPlay()
+        }
+        else{
+          that.syncPlaylist(playlist)
+        }
+      }
+      playListApi('append_songs', {songs:songs}, callback)
     },
     clearList: function () {
-      playListApi('set_songs', {songs:[]}, this.syncPlaylist)
+      this.setSongs([])
+    },
+    removeFromPlaylist: function (idx) {
+      songs = this.songs
+      songs.splice(idx, 1)
+      this.setSongs(songs)
+    },
+    setSongs: function(songs){
+      playListApi('set_songs', {songs:songs}, this.syncPlaylist)
     },
     playSong: function(idx){
       playListApi('set_current_song', {current_song:idx, play:true}, this.syncPlaylist)
@@ -228,20 +265,6 @@ var app = new Vue({
     }
   },
 })
-
-function addSongs(songs, that){
-  var was_empty = that.songs.length == 0
-  var callback = function(playlist){
-    if(was_empty){
-      //if list was empty then play it
-      that.doPlay()
-    }
-    else{
-      that.syncPlaylist(playlist)  
-    }
-  }
-  playListApi('append_songs', {songs:songs}, callback)
-}
 
 function playListApi(method, params, callback){
   axios.post(BASE_URL + '/playlist_rscr/' + method, params
