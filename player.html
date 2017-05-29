@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<meta name="robots" content="noindex">
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Player</title>
+
+  <link href="https://getbootstrap.com/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+<!--   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.3.3/vue.js"></script> -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.3.3/vue.min.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+<style>
+.wrap {
+white-space: -moz-pre-wrap !important;  /* Mozilla, since 1999 */
+white-space: -webkit-pre-wrap; /*Chrome & Safari */ 
+white-space: -pre-wrap;      /* Opera 4-6 */
+white-space: -o-pre-wrap;    /* Opera 7 */
+white-space: pre-wrap;       /* css-3 */
+word-wrap: break-word;       /* Internet Explorer 5.5+ */
+word-break: break-all;
+white-space: normal;
+}
+</style>
+</head>
+<body>
+
+<p/>
+
+<div id="app" class="container">
+
+  
+  
+  <div class="container-fluid">
+  <div class="row">
+  
+<div class="col-sm-6">
+  <div class="panel panel-default">
+    <div class="panel-heading text-center">
+     <div class="text-center">{{song_time}}</div>
+     <div class="well" style="background-color:white;">{{current_song_name}}
+       <i class="fa fa-refresh fa-spin fa-x fa-fw" v-if="pending_update"></i>
+     </div>
+
+     <div class="btn-group" role="group">
+     <button class="btn btn-default btn-sm" v-on:click="doPrev"><i class="fa fa-step-backward"></i></button>
+     <button class="btn btn-default btn-sm" v-on:click="doStop"><i class="fa fa-stop"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="doPause" v-if="status == 'play'"><i class="fa fa-pause"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="doPlay" v-if="status !== 'play'"><i class="fa fa-play"></i></button>
+     <button class="btn btn-default btn-sm" v-on:click="doNext"><i class="fa fa-step-forward"></i></button>
+     </div>
+     <button class="btn btn-default btn-sm" v-on:click="clearList">Clear list</button>
+     
+     <div class="btn-group" role="group">
+     <button class="btn btn-default btn-sm" v-on:click="volumeDown" >-</button>
+     <button class="btn btn-default btn-sm" v-on:click="volumeUp" >+</button>
+     </div> Vol: {{volume}}
+     
+    </div>
+    <div class="panel-body">
+       <table id="play_list" class="table table-striped">
+         <tr v-for="(song,idx) in songs">
+           <td >
+           <i class="fa fa-asterisk" aria-hidden="true" v-if="idx == current_song"></i>
+           <td v-on:click="playSong(idx)" class="wrap">
+           <b v-if="idx == current_song">{{song}}</b>
+           <span v-if="idx !== current_song">{{song}}</span>
+         </tr>
+       </table>
+    </div>
+    
+    <div class="panel-footer">
+    <button class="btn btn-default btn-sm" v-on:click="browse_directory = !browse_directory">Files</button>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-6" v-if="browse_directory"> 
+   <div class="panel panel-default">
+     <div class="panel-heading">
+      <button class="btn btn-default btn-sm" v-on:click="refreshDirectory">Refresh</button>
+      <button class="btn btn-default btn-sm" v-on:click="addAllSongs">Add all</button>
+     </div>
+     <div class="panel-body" >
+      <table id="directory" class="table table-striped">
+        <tr v-for="song in directory_list">
+          <td v-on:click="addSong(song)" class="wrap">{{song.name}}
+        </tr>
+      </table>
+     </div>
+   </div>
+ </div>
+
+
+   </div>
+  </div>
+  
+  <table id="pprints">
+    <tr v-for="pp in pprints">
+      <td>{{ pp }}
+    </tr>
+  </table>
+  
+  </div>
+</div>
+
+
+
+<script>
+var PLAY_STAT = 'play'
+var PAUSE_STAT = 'pause'
+var STOP_STAT = 'stop'
+
+var BASE_URL = ''
+var FETCH_MODE = undefined//'cors'
+
+
+function FormatNumberLength(num, length) {
+    var r = "" + num;
+    while (r.length < length) {
+        r = "0" + r;
+    }
+    return r;
+}
+
+var app = new Vue({
+  el: '#app',
+  data: {
+	position: 0,
+    status: PAUSE_STAT,
+    volume: 10,
+    //songs_list: {current_idx:0, songs:[]},
+    current_song: '',
+    songs:[],
+    player_info:{},
+    err:'',
+    directory_list:[],
+    pprints:[],
+    update_counter:0,
+    pending_update: false,
+    browse_directory: true,
+  },
+  computed:{
+    current_song_name: function(){
+      if(this.current_song <= this.songs.length){
+        return this.songs[this.current_song]  
+      } else{
+    	return ''
+      }
+    },
+    song_time: function(){
+      var mins = this.position/60000
+      var fmt = function(num){
+    	  return FormatNumberLength(num, 2)
+      }
+      return fmt(Math.floor(mins)) + ':' + fmt(Math.floor(60 * (mins % 1)))
+    },
+  },
+  methods: {
+	getSongName: function(){
+	  return this.songs[this.current_song]
+	},
+    refreshDirectory: function () {
+      that = this;
+      axios.post(BASE_URL + '/directory_rsrc'
+      ).then(function(resp) {
+        json = resp.data
+        that.directory_list = json;
+      }).catch(function (error) {
+    	console.error(error);
+      });
+    },
+    refreshPlaylist: function () {
+      playListApi('get_playlist', {}, this.syncPlaylist)
+    },
+    syncPlaylist: function(playlist){
+      var properties = 'status volume current_song songs player_info update_counter err'.split(' ')
+      for(var idx in properties){
+        prop_name = properties[idx]
+        Vue.set(this, prop_name, playlist[prop_name])
+      }
+      if(this.player_info['position'] !== undefined){
+        this.position = this.player_info['position']
+      }
+      //this.pending_update = false
+    },
+    doPrev: function () {
+      playListApi('prev_song', {}, this.syncPlaylist)
+    },
+    doNext: function () {
+      playListApi('next_song', {}, this.syncPlaylist)
+    },
+    doPlay: function () {
+      setStatus(PLAY_STAT)
+    },
+    doPause: function () {
+      setStatus(PAUSE_STAT)
+    },
+    doStop: function () {
+      setStatus(STOP_STAT)
+    },
+    addAllSongs: function () {
+      songs = []
+      for(var idx in this.directory_list){
+    	songs.push(this.directory_list[idx].id)
+      }
+      addSongs(songs, this)
+    },
+    addSong: function (song) {
+      addSongs([song.id], this)
+    },
+    clearList: function () {
+      playListApi('set_songs', {songs:[]}, this.syncPlaylist)
+    },
+    playSong: function(idx){
+      playListApi('set_current_song', {current_song:idx, play:true}, this.syncPlaylist)
+    },
+    volumeUp: function(){
+      playListApi('set_volume', {volume:this.volume + 2}, this.setVolume)
+    },
+    volumeDown: function(){
+      playListApi('set_volume', {volume:this.volume - 2}, this.setVolume)
+    },
+    setVolume: function(vol){
+      this.volume = vol
+    }
+  },
+})
+
+function addSongs(songs, that){
+  var was_empty = that.songs.length == 0
+  var callback = function(playlist){
+    if(was_empty){
+      //if list was empty then play it
+      that.doPlay()
+    }
+    else{
+      that.syncPlaylist(playlist)  
+    }
+  }
+  playListApi('append_songs', {songs:songs}, callback)
+}
+
+function playListApi(method, params, callback){
+  axios.post(BASE_URL + '/playlist_rscr/' + method, params
+  ).then(function(resp) {
+     result = resp.data
+     if(result.err){
+       pprint(result.err)
+     }
+     callback(result)
+   }).catch(function (error) {
+	    console.error(error);
+   });
+}
+
+function setStatus(status){
+  playListApi('set_status', {status:status}, app.syncPlaylist)
+}
+
+function pprint(obj){
+  app.pprints.unshift(obj)
+}
+
+function poll(){
+  function callback(info){
+    if(info.update_counter !== app.update_counter){
+      app.update_counter = info.update_counter
+      app.pending_update = true
+      playListApi('get_playlist', {}, app.syncPlaylist)
+    }
+    else {
+      app.pending_update = false
+    }
+    if(info.position !== undefined){
+        app.position = info.position
+    }
+  }
+  playListApi('get_player_info', {}, callback)
+}
+
+function updatePosition(){
+	if(app.status == PLAY_STAT){
+		app.position = app.position + 500
+	}
+	else if(app.status == STOP_STAT && app.position > 0){
+		app.position = 0
+	}
+}
+
+setTimeout(function() {
+  app.refreshDirectory()
+}, 100)
+
+setTimeout(function() {
+  app.refreshPlaylist()
+}, 200)
+
+setTimeout(function() {
+   poll()
+   setInterval(poll, 3000)
+   setInterval(updatePosition, 500)
+}, 500)
+</script>
+
+
+</body>
+</html>
