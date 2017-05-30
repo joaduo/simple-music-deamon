@@ -7,8 +7,7 @@
   <title>Player</title>
 
   <link href="https://getbootstrap.com/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
-<!--   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.3.3/vue.js"></script> -->
+  <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.3.3/vue.min.js"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
@@ -63,10 +62,10 @@ white-space: normal;
        <table id="play_list" class="table table-striped">
          <tr v-for="(song,idx) in songs">
            <td >
-           <i class="fa fa-asterisk" aria-hidden="true" v-if="idx == current_song"></i>
+           <i class="fa fa-asterisk" aria-hidden="true" v-if="idx == current_song_idx"></i>
            <td v-on:click="playSong(idx)" class="wrap">
-           <b v-if="idx == current_song">{{song}}</b>
-           <span v-if="idx !== current_song">{{song}}</span>
+           <b v-if="idx == current_song_idx">{{song.name}}</b>
+           <span v-if="idx !== current_song_idx">{{song.name}}</span>
            <td><i v-on:click="removeFromPlaylist(idx)" class="fa fa-times" aria-hidden="true"></i>
          </tr>
        </table>
@@ -81,14 +80,22 @@ white-space: normal;
 <div class="col-sm-6" v-if="browse_directory"> 
    <div class="panel panel-default">
      <div class="panel-heading">
-      <button class="btn btn-default btn-sm" v-on:click="refreshDirectory">Refresh</button>
-      <button class="btn btn-default btn-sm" v-on:click="addAllSongs">Add all</button> 
-      <input type="text" class="form-control" id="search_song" v-model="search_song">
+      <button class="btn btn-default btn-sm" v-on:click="addAllSongs">Add all</button>
+      <input type="text" class="form-control" id="search_song" v-model="search_song" placeholder="filter...">
+      <button class="btn btn-default btn-sm" v-on:click="refreshDirectory">
+        <i class="fa fa-refresh" aria-hidden="true"></i>
+      </button>
+      <div v-for="(dir,idx) in dir_path" class="btn-group" role="group">
+        <button class="btn btn-default btn-sm" v-on:click="setDir(idx)">{{dir}}</button>
+      </div>
      </div>
      <div class="panel-body" >
       <table id="directory" class="table table-striped">
         <tr v-for="song in directory_filtered">
-          <td v-on:click="addSong(song)" class="wrap">{{song.name}}
+          <td v-on:click="addSongOpenDir(song)" class="wrap">
+          <i class="fa fa-folder-open-o" aria-hidden="true" v-if="song.isdir"></i>
+          <i class="fa fa-music" aria-hidden="true" v-if="!song.isdir"></i>
+          {{song.name}}
         </tr>
       </table>
      </div>
@@ -127,10 +134,10 @@ function FormatNumberLength(num, length) {
 var app = new Vue({
   el: '#app',
   data: {
-	position: 0,
+    position: 0,
     status: PAUSE_STAT,
     volume: 10,
-    current_song: 0,
+    current_song_idx: 0,
     songs:[],
     player_info:{},
     err:'',
@@ -140,17 +147,19 @@ var app = new Vue({
     pending_update: false,
     browse_directory: true,
     search_song:'',
+    dir_path: ['/'],
   },
   computed:{
     directory_filtered: function(){
+      var filtered = []
       if (this.search_song === ''){
         filtered = this.directory_list
       }
       else{
-        filtered = []
+        var search = this.search_song.toLowerCase()
         for(var idx in this.directory_list){
           var s = this.directory_list[idx]
-          if(s.name.toLowerCase().indexOf(this.search_song) >= 0){
+          if(s.name.toLowerCase().indexOf(search) >= 0){
             filtered.push(s)
           }
         }
@@ -158,39 +167,44 @@ var app = new Vue({
       return filtered
     },
     current_song_name: function(){
-      if(this.current_song <= this.songs.length){
-        return this.songs[this.current_song]  
+      if(this.current_song_idx < this.songs.length){
+        return this.songs[this.current_song_idx].name
       } else{
-    	return ''
+        return ''
       }
     },
     song_time: function(){
       var mins = this.position/60000
       var fmt = function(num){
-    	  return FormatNumberLength(num, 2)
+          return FormatNumberLength(num, 2)
       }
       return fmt(Math.floor(mins)) + ':' + fmt(Math.floor(60 * (mins % 1)))
     },
   },
   methods: {
-	getSongName: function(){
-	  return this.songs[this.current_song]
-	},
+    getSongName: function(){
+      return this.songs[this.current_song_idx]
+    },
+    setDir: function(idx){
+      idx += 1
+      this.dir_path.splice(idx,this.dir_path.length - idx)
+      this.refreshDirectory()
+    },
     refreshDirectory: function () {
       that = this;
-      axios.post(BASE_URL + '/directory_rsrc'
+      axios.post(BASE_URL + '/directory_rsrc', {dir_path:this.dir_path}
       ).then(function(resp) {
         json = resp.data
         that.directory_list = json;
       }).catch(function (error) {
-    	console.error(error);
+        console.error(error);
       });
     },
     refreshPlaylist: function () {
       playListApi('get_playlist', {}, this.syncPlaylist)
     },
     syncPlaylist: function(playlist){
-      var properties = 'status volume current_song songs player_info update_counter err'.split(' ')
+      var properties = 'status volume current_song_idx songs player_info update_counter err'.split(' ')
       for(var idx in properties){
         prop_name = properties[idx]
         Vue.set(this, prop_name, playlist[prop_name])
@@ -219,12 +233,18 @@ var app = new Vue({
       songs = []
       filtered = this.directory_filtered
       for(var idx in filtered){
-        songs.push(filtered[idx].id)
+        songs.push(filtered[idx])
       }
       this.addSongs(songs)
     },
-    addSong: function (song) {
-      this.addSongs([song.id])
+    addSongOpenDir: function (song) {
+      if(!song.isdir){
+        this.addSongs([song])
+      }
+      else{
+        this.dir_path.push(song.name)
+        this.refreshDirectory()
+      }
     },
     addSongs: function (songs){
       that = this
@@ -238,7 +258,14 @@ var app = new Vue({
           that.syncPlaylist(playlist)
         }
       }
-      playListApi('append_songs', {songs:songs}, callback)
+      var songs2 = []
+      for(var idx in songs){
+         s = songs[idx]
+         if(!s.isdir){
+           songs2.push(s.id)
+         }
+      }
+      playListApi('append_songs', {songs:songs2}, callback)
     },
     clearList: function () {
       this.setSongs([])
@@ -249,10 +276,14 @@ var app = new Vue({
       this.setSongs(songs, idx)
     },
     setSongs: function(songs, idx){
-      playListApi('set_songs', {songs:songs, current_idx:idx}, this.syncPlaylist)
+      var songs2 = []
+      for(var i in songs){
+         songs2.push(songs[i].id)
+      }
+      playListApi('set_songs', {songs:songs2, current_song_idx:idx}, this.syncPlaylist)
     },
     playSong: function(idx){
-      playListApi('set_current_song', {current_song:idx, play:true}, this.syncPlaylist)
+      playListApi('set_current_song', {current_song_idx:idx, play:true}, this.syncPlaylist)
     },
     volumeUp: function(){
       playListApi('set_volume', {volume:this.volume + 1}, this.setVolume)
@@ -275,7 +306,7 @@ function playListApi(method, params, callback){
      }
      callback(result)
    }).catch(function (error) {
-	    console.error(error);
+        console.error(error);
    });
 }
 
@@ -305,16 +336,16 @@ function poll(){
 }
 
 function updatePosition(){
-	if(app.status == PLAY_STAT){
-		app.position = app.position + 500
-	}
-	else if(app.status == STOP_STAT && app.position > 0){
-		app.position = 0
-	}
+    if(app.status == PLAY_STAT){
+        app.position = app.position + 500
+    }
+    else if(app.status == STOP_STAT && app.position > 0){
+        app.position = 0
+    }
 }
 
 setTimeout(function() {
-  app.refreshDirectory()
+  app.refreshDirectory(null)
 }, 100)
 
 setTimeout(function() {

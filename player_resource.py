@@ -7,6 +7,7 @@ import threading
 from functools import wraps
 import settings
 import logging
+from fnmatch import fnmatch
 
 PLAY_STAT = 'play'
 PAUSE_STAT = 'pause'
@@ -81,6 +82,10 @@ class PlayList(object):
             return self.songs[self.current_idx]
         return ''
 
+    @property
+    def songs_names(self):
+        return [dict(id=s, name=path.basename(s)) for s in self.songs]
+
     def get_playlist(self):
         player_info = dict(changed=False)
         if self.current_song != self._previous_song:
@@ -90,8 +95,9 @@ class PlayList(object):
         return dict(
                     status=self.status,
                     volume=self.volume,
-                    current_song=self.current_idx,
-                    songs=self.songs,
+                    current_song_idx=self.current_idx,
+                    #songs=self.songs,
+                    songs=self.songs_names,
                     player_info=player_info,
                     update_counter=self.update_counter,
                     err='',)
@@ -101,7 +107,7 @@ class PlayList(object):
         self._previous_song = self.current_song
         self._status = self.status
         if self.songs:
-            url = 'file://'+ get_music_dir() + self.current_song
+            url = 'file://'+ self.current_song
             info = do_player(self._status, url)
             self._schedule_next_song(info)
         else:
@@ -140,34 +146,39 @@ class PlayList(object):
         return self.get_playlist()
 
     @mark_update
-    def set_songs(self, songs, current_idx=0):
+    def set_songs(self, songs, current_song_idx=0):
+        def match(n):
+            return any(n.endswith('.'+ ext) for ext in ('mp3','ogg','wma','flac'))
+        songs = [s for s in songs if match(s)]
         self.songs[:] = songs
         if not songs:
             self.current_idx = 0
             self.status = STOP_STAT
         else:
-            self.current_idx = current_idx % len(songs)
+            self.current_idx = int(current_song_idx) % len(songs)
         return self.get_playlist()
 
     @mark_update
     def append_songs(self, songs):
-        self.songs += songs
-        return self.get_playlist()
+        return self.set_songs(self.songs + songs, self.current_idx)
 
     @mark_update
     def set_status(self, status):
+        if not self.songs:
+            status = STOP_STAT
         self.status = status
         return self.get_playlist()
 
     @mark_update
-    def set_current_song(self, current_song, play=False): 
-        self.current_idx = current_song
+    def set_current_song(self, current_song_idx, play=False):
+        if self.songs:
+            self.current_idx = int(current_song_idx) % len(self.songs)
         if play:
             self.status = PLAY_STAT
         return self.get_playlist()
 
     def set_volume(self, volume):
-        set_volume(volume)
+        set_volume(int(volume))
         return self.volume
 
     def get_player_info(self):
@@ -181,15 +192,28 @@ class PlayList(object):
             self.status = get_play_status()
         return self.update_counter
 
+
 def directory_rsrc():
-    songs_list = []
-    songs_dir = path.join(get_music_dir(), '')
-    for s in os.listdir(songs_dir):
-        s = s.decode('utf8')
-        songs_list.append(dict(name=s, id=s
-                               #path.join(songs_dir, s)
-                               ))
-    return json.dumps(songs_list)
+    base_dir = os.sep.join(json.loads(request.data).get('dir_path')).strip(os.sep)
+    base_dir = path.join(settings.MUSIC_DIR, base_dir)
+    files_list = []
+    if is_subdir(base_dir, settings.MUSIC_DIR):
+        def append(flist, isdir):
+            for f in flist:
+                files_list.append(dict(isdir=isdir, name=f, id=path.join(dirpath, f)))
+        for (dirpath, dirnames, filenames) in os.walk(base_dir):
+            append(dirnames, isdir=True)
+            append(filenames, isdir=False)
+            break
+    return json.dumps(files_list)
+
+
+def is_subdir(suspect_child, suspect_parent):
+    suspect_child = path.realpath(suspect_child)
+    suspect_parent = path.realpath(suspect_parent)
+    relative = path.relpath(suspect_child, start=suspect_parent)
+    return not relative.startswith(os.pardir)
+
 
 def get_music_dir():
     return settings.MUSIC_DIR
