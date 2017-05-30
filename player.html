@@ -45,18 +45,18 @@ white-space: normal;
      </div>
 
      <div class="btn-group" role="group">
-     <button class="btn btn-default btn-sm" v-on:click="doPrev"><i class="fa fa-step-backward"></i></button>
-     <button class="btn btn-default btn-sm" v-on:click="doStop"><i class="fa fa-stop"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="doPrev"><i class="fa fa-step-backward"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="doStop"><i class="fa fa-stop"></i></button>
      <button class="btn btn-default btn-lg" v-on:click="doPause" v-if="status == 'play'"><i class="fa fa-pause"></i></button>
      <button class="btn btn-default btn-lg" v-on:click="doPlay" v-if="status !== 'play'"><i class="fa fa-play"></i></button>
-     <button class="btn btn-default btn-sm" v-on:click="doNext"><i class="fa fa-step-forward"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="doNext"><i class="fa fa-step-forward"></i></button>
      </div>
      <button class="btn btn-default btn-sm" v-on:click="clearList">Clear list</button>
      
      <div class="btn-group" role="group">
-     <button class="btn btn-default btn-sm" v-on:click="volumeDown" >-</button>
-     <button class="btn btn-default btn-sm" v-on:click="volumeUp" >+</button>
-     </div> Vol: {{volume}}
+     <button class="btn btn-default btn-lg" v-on:click="volumeDown" ><i class="fa fa-volume-down" aria-hidden="true"></i></button>
+     <button class="btn btn-default btn-lg" v-on:click="volumeUp" ><i class="fa fa-volume-up" aria-hidden="true"></i></button>
+     </div> vol: {{volume}}
      
     </div>
     <div class="panel-body">
@@ -67,7 +67,7 @@ white-space: normal;
            <td v-on:click="playSong(idx)" class="wrap">
            <b v-if="idx == current_song">{{song}}</b>
            <span v-if="idx !== current_song">{{song}}</span>
-           <td><span v-on:click="removeFromPlaylist(idx)">X</span>
+           <td><i v-on:click="removeFromPlaylist(idx)" class="fa fa-times" aria-hidden="true"></i>
          </tr>
        </table>
     </div>
@@ -130,7 +130,7 @@ var app = new Vue({
 	position: 0,
     status: PAUSE_STAT,
     volume: 10,
-    current_song: '',
+    current_song: 0,
     songs:[],
     player_info:{},
     err:'',
@@ -246,19 +246,19 @@ var app = new Vue({
     removeFromPlaylist: function (idx) {
       songs = this.songs
       songs.splice(idx, 1)
-      this.setSongs(songs)
+      this.setSongs(songs, idx)
     },
-    setSongs: function(songs){
-      playListApi('set_songs', {songs:songs}, this.syncPlaylist)
+    setSongs: function(songs, idx){
+      playListApi('set_songs', {songs:songs, current_idx:idx}, this.syncPlaylist)
     },
     playSong: function(idx){
       playListApi('set_current_song', {current_song:idx, play:true}, this.syncPlaylist)
     },
     volumeUp: function(){
-      playListApi('set_volume', {volume:this.volume + 2}, this.setVolume)
+      playListApi('set_volume', {volume:this.volume + 1}, this.setVolume)
     },
     volumeDown: function(){
-      playListApi('set_volume', {volume:this.volume - 2}, this.setVolume)
+      playListApi('set_volume', {volume:this.volume - 1}, this.setVolume)
     },
     setVolume: function(vol){
       this.volume = vol

@@ -38,6 +38,7 @@ def _serve_reload_module(funcname, *args, **kwargs):
     mtime = os.path.getmtime(mod_path)
     if settings.RELOAD_MODE and last_mtime != mtime:
         last_mtime = mtime
+        player_resource.SL.cancel_timer()
         pr = reload(player_resource)
     return getattr(pr, funcname)(*args, **kwargs)
 

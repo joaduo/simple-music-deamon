@@ -2,43 +2,28 @@ from flask import request
 import os
 from os import path
 import json
-#import android
 import androidhelper as android
 import threading
 from functools import wraps
 import settings
+import logging
 
 PLAY_STAT = 'play'
 PAUSE_STAT = 'pause'
 STOP_STAT = 'stop'
 
-class Logging(object):
-    def info(self, msg, *args):
-        if args:
-            msg = msg % args
-        print(msg)
-
-logging = Logging()
-
 droid = android.Android()
-#current_idx = 0
-def do_player(status, url=None, idx=None):
-    #logging.info('Setting %s %s', status, url.encode('utf8'))
+def do_player(status, url=None):
+    logging.info('Setting %r %s', url, status)
     info = get_player_info()
-    #global current_idx
     if status == PLAY_STAT and (not info.get('isplaying')
-                                or info.get('url') != url
-                                #or current_idx != idx
-                                ):
-        if (info['loaded'] and info['url'] == url
-            #and current_idx == idx
-            ):
+                                or info.get('url') != url):
+        if info['loaded'] and info['url'] == url:
             droid.mediaPlayStart()
         else:
             droid.mediaPlay(url)
-        #current_idx = idx
         secs = droid.mediaPlayInfo().result.get('duration',0) / 1000.
-        #logging.info('Playing: %s %ss', url.encode('utf8'), secs)
+        logging.info('Playing: %r %ss', url, secs)
     elif status == PAUSE_STAT and info.get('isplaying'):
         droid.mediaPlayPause()
     elif status == STOP_STAT and info['loaded']:
@@ -81,7 +66,6 @@ class PlayList(object):
         self.status = get_play_status()
         self.songs = []
         self.current_idx = 0
-        self._previous_idx = -1
         self._previous_song = None
         self._status = None
         self._timer = None
@@ -99,10 +83,8 @@ class PlayList(object):
 
     def get_playlist(self):
         player_info = dict(changed=False)
-#        if self.current_idx != self._previous_idx:
         if self.current_song != self._previous_song:
-            if 0 <= self.current_idx < len(self.songs):
-                player_info = self._do_player()
+            player_info = self._do_player()
         if self._status != self.status:
             player_info = self._do_player()
         return dict(
@@ -116,12 +98,11 @@ class PlayList(object):
 
     def _do_player(self):
         self.cancel_timer()
-#        self._previous_idx = self.current_idx
         self._previous_song = self.current_song
         self._status = self.status
         if self.songs:
             url = 'file://'+ get_music_dir() + self.current_song
-            info = do_player(self._status, url, self.current_idx)
+            info = do_player(self._status, url)
             self._schedule_next_song(info)
         else:
             info = do_player(STOP_STAT, None)
@@ -130,7 +111,6 @@ class PlayList(object):
 
     def _schedule_next_song(self, info):
         if self.status == PLAY_STAT:
-            #assert info['loaded'] and info['isplaying']
             # remaining miliseconds
             remaining = info['duration'] - info['position']
             if remaining:
@@ -156,23 +136,17 @@ class PlayList(object):
         logging.info('Next song')
         if self.status == PAUSE_STAT:
             self.status = STOP_STAT
-        if self.current_idx < len(self.songs):
-            self.current_idx += 1
-        if self.current_idx == len(self.songs):
-            self.status = STOP_STAT
-            self.current_idx = 0
+        self.current_idx = (self.current_idx + 1) % len(self.songs)
         return self.get_playlist()
 
     @mark_update
-    def set_songs(self, songs):
-        current_path = self.songs[self.current_idx]
-        new_idx = 0
-        if current_path in songs:
-            new_idx = songs.index(current_path)
+    def set_songs(self, songs, current_idx=0):
         self.songs[:] = songs
-        self.current_idx = new_idx
         if not songs:
+            self.current_idx = 0
             self.status = STOP_STAT
+        else:
+            self.current_idx = current_idx % len(songs)
         return self.get_playlist()
 
     @mark_update
