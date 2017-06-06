@@ -147,9 +147,7 @@ class PlayList(object):
 
     @mark_update
     def set_songs(self, songs, current_song_idx=0):
-        def match(n):
-            return any(n.endswith('.'+ ext) for ext in ('mp3','ogg','wma','flac'))
-        songs = [s for s in songs if match(s)]
+        songs = [s for s in songs if is_music_file(s)]
         self.songs[:] = songs
         if not songs:
             self.current_idx = 0
@@ -192,6 +190,8 @@ class PlayList(object):
             self.status = get_play_status()
         return self.update_counter
 
+def is_music_file(n):
+    return any(n.endswith('.'+ ext) for ext in ('mp3','ogg','wma','flac'))
 
 def directory_rsrc():
     base_dir = os.sep.join(json.loads(request.data).get('dir_path')).strip(os.sep)
@@ -199,8 +199,10 @@ def directory_rsrc():
     files_list = []
     if is_subdir(base_dir, settings.MUSIC_DIR):
         def append(flist, isdir):
-            for f in flist:
-                files_list.append(dict(isdir=isdir, name=f, id=path.join(dirpath, f)))
+            for f in sorted(flist):
+                files_list.append(dict(isdir=isdir, name=f,
+                                       id=path.join(dirpath, f),
+                                       is_music=not isdir and is_music_file(f)))
         for (dirpath, dirnames, filenames) in os.walk(base_dir):
             append(dirnames, isdir=True)
             append(filenames, isdir=False)

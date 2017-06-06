@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width">
   <title>Player</title>
 
+<!-- Favicon -->
+<link href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAABILAAASCwAAAAAAAAAAAAAAAAAlAAAAxQAAAPkAAAC9AAAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAxQAAAP8AAAD/AAAA/wAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAACEAAAAGAAAAAAAAAPkAAAD/AAAA/wAAAP8AAADqAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAOEAAAD/AAAA5wAAADsAAAC9AAAA/wAAAP8AAAD/AAAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMQAAAD/AAAA/wAAAP8AAADVAAAAHAAAALQAAADnAAAA0QAAAOwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADmAAAA/wAAAP8AAAD/AAAA/QAAAAAAAAAAAAAAAAAAAE0AAADsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAmAAAAP8AAAD/AAAA/wAAAP0AAAAAAAAAAAAAAAAAAABNAAAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAACFAAAAwAAAALEAAAD9AAAAAAAAAAAAAAAAAAAATQAAAOwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9AAAA/QAAAAAAAAAAAAAAAAAAAE0AAAD7AAAAqwAAAGQAAAAfAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPQAAAP0AAAAAAAAAAAAAAAAAAABNAAAA9AAAAI8AAADWAAAA/QAAANUAAACPAAAASAAAAAkAAAAAAAAAAAAAAD0AAAD9AAAAAAAAAAAAAAAAAAAATQAAAOwAAAAAAAAAAAAAAB4AAABkAAAAqwAAAO0AAAD3AAAAuQAAAHIAAABkAAAA/QAAAAAAAAAAAAAAAAAAAE0AAADvAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAFAAAAOgAAAIEAAADHAAAA/AAAAP0AAAAAAAAAAAAAAAAAAAA1AAAA8gAAAPMAAACzAAAAbAAAACYAAAABAAAAAAAAAAAAAAAAAAAAAAAAAEUAAAD9AAAAAAAAAAAAAAAAAAAAAAAAAAcAAAA/AAAAhwAAAM0AAAD9AAAA3QAAAJcAAABQAAAADgAAAAAAAAA9AAAA/QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFwAAAFwAAACjAAAA5wAAAPoAAADCAAAAoQAAAP0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAyAAAAeQAAAMAAAADiB/8AAAfxAAAH4AAAB+AAAAfgAADn4AAA5+AAAOf8AADgfAAA4AwAAOQAAADjwAAA4DwAAPAEAAD/AAAA/+AAAA==" rel="icon" type="image/x-icon">
+
   <link href="https://getbootstrap.com/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.3.3/vue.min.js"></script>
@@ -38,9 +41,13 @@ white-space: normal;
 <div class="col-sm-6">
   <div class="panel panel-default">
     <div class="panel-heading text-center">
+     <i class="fa fa-refresh fa-spin fa-x fa-fw" v-if="pending_update"></i>
      <div class="text-center">{{song_time}}</div>
-     <div class="well" style="background-color:white;">{{current_song_name}}
-       <i class="fa fa-refresh fa-spin fa-x fa-fw" v-if="pending_update"></i>
+
+     <div class="well" style="background-color:white;">
+       {{previous_song_name}}
+       <p><h3>{{current_song_name}}</h3>
+       <p>{{next_song_name}}
      </div>
 
      <div class="btn-group" role="group">
@@ -56,7 +63,7 @@ white-space: normal;
      <button class="btn btn-default btn-lg" v-on:click="volumeDown" ><i class="fa fa-volume-down" aria-hidden="true"></i></button>
      <button class="btn btn-default btn-lg" v-on:click="volumeUp" ><i class="fa fa-volume-up" aria-hidden="true"></i></button>
      </div> vol: {{volume}}
-     
+
     </div>
     <div class="panel-body">
        <table id="play_list" class="table table-striped">
@@ -86,7 +93,7 @@ white-space: normal;
         <i class="fa fa-refresh" aria-hidden="true"></i>
       </button>
       <div v-for="(dir,idx) in dir_path" class="btn-group" role="group">
-        <button class="btn btn-default btn-sm" v-on:click="setDir(idx)">{{dir}}</button>
+        <button class="btn btn-default btn-sm wrap" v-on:click="setDir(idx)">{{dir}}</button>
       </div>
      </div>
      <div class="panel-body" >
@@ -94,7 +101,8 @@ white-space: normal;
         <tr v-for="song in directory_filtered">
           <td v-on:click="addSongOpenDir(song)" class="wrap">
           <i class="fa fa-folder-open-o" aria-hidden="true" v-if="song.isdir"></i>
-          <i class="fa fa-music" aria-hidden="true" v-if="!song.isdir"></i>
+          <i class="fa fa-music" aria-hidden="true" v-if="song.is_music"></i>
+          <i class="fa fa-file-text-o" aria-hidden="true" v-if="!song.isdir && !song.is_music"></i>
           {{song.name}}
         </tr>
       </table>
@@ -168,10 +176,24 @@ var app = new Vue({
     },
     current_song_name: function(){
       if(this.current_song_idx < this.songs.length){
-        return this.songs[this.current_song_idx].name
+        return trimExtension(this.songs[this.current_song_idx].name)
       } else{
         return ''
       }
+    },
+    previous_song_name: function(){
+      var idx = this.current_song_idx - 1
+      if(0 <= idx && idx < this.songs.length){
+        return trimExtension(this.songs[idx].name)
+      }
+      return '-'
+    },
+    next_song_name: function(){
+      var idx = this.current_song_idx + 1
+      if(idx < this.songs.length){
+        return trimExtension(this.songs[idx].name)
+      }
+      return '-'
     },
     song_time: function(){
       var mins = this.position/60000
@@ -212,7 +234,6 @@ var app = new Vue({
       if(this.player_info['position'] !== undefined){
         this.position = this.player_info['position']
       }
-      //this.pending_update = false
     },
     doPrev: function () {
       playListApi('prev_song', {}, this.syncPlaylist)
@@ -273,7 +294,11 @@ var app = new Vue({
     removeFromPlaylist: function (idx) {
       songs = this.songs
       songs.splice(idx, 1)
-      this.setSongs(songs, idx)
+      var song_idx = this.current_song_idx
+      if(idx < song_idx){
+        song_idx -= 1
+      }
+      this.setSongs(songs, song_idx)
     },
     setSongs: function(songs, idx){
       var songs2 = []
@@ -296,6 +321,10 @@ var app = new Vue({
     }
   },
 })
+
+function trimExtension(file_name){
+	return file_name.replace(/\.[^/.]+$/, "")
+}
 
 function playListApi(method, params, callback){
   axios.post(BASE_URL + '/playlist_rscr/' + method, params
